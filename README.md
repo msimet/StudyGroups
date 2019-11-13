@@ -1,0 +1,1 @@
+This module is designed for teachers who have students they would like to divide into small groups with a good distribution of group mates (which random group organization may not do). It is run through a yaml configuration file describing the students in the class and the requested groups.
