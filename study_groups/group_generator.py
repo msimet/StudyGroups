@@ -1,10 +1,22 @@
 """
 group_generator.py: contains the main implementation of GroupGenerator, the main object for the StudyGroups package.
 """
+import yaml
+import numpy as np
 
 class GroupGenerator:
     def __init__(self, yaml_file):
-        pass
+        with open(yaml_file) as f:
+            config = yaml.load(f)
+        if 'names' not in config or 'groups' not in config:
+            raise TypeError("YAML file {} must have a 'names' key and a 'groups' key".format(yaml_file))
+        self.n = len(config['names'])
+        self.names = config['names']
+        self.indices = np.arange(self.n, dtype=int)
+        # matrix: the joint appearances count (if student 1 & 2 appear together once, matrix[1,2]==matrix[2,1]==1),
+        self.matrix = np.zeros((self.n, self.n))
+        if 'seed' in config:
+            np.random.seed(config['seed'])
         
     
     def generate_combinations(self, n):

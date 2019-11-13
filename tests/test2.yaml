@@ -1,0 +1,10 @@
+groups:
+    - distribution: 2, 2, 2, 2, 2, 2
+      num: 8
+    - distribution: 3, 3, 3, 3
+      num: 4
+    - distribution: 4, 4, 4
+      num: 10
+    - distribution: 6, 6
+      num: 1
+
