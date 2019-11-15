@@ -7,7 +7,7 @@ import numpy as np
 class GroupGenerator:
     def __init__(self, yaml_file):
         with open(yaml_file) as f:
-            config = yaml.load(f)
+            config = yaml.load(f, Loader=yaml.SafeLoader)
         if 'names' not in config or 'groups' not in config:
             raise TypeError("YAML file {} must have a 'names' key and a 'groups' key".format(yaml_file))
         self.n = len(config['names'])
