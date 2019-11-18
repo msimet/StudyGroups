@@ -3,6 +3,7 @@ group_generator.py: contains the main implementation of GroupGenerator, the main
 StudyGroups package.
 """
 #pylint: disable=C0103, R0201
+import itertools
 import yaml
 import numpy as np
 
@@ -51,6 +52,7 @@ class GroupGenerator:
         self.matrix = np.zeros((self.n, self.n))
         if 'seed' in config:
             np.random.seed(config['seed'])
+        self.possible_combinations = {} # Hackily memoize some of the distribution calculations
 
     def pairs(self, divisions):
         """
@@ -144,22 +146,109 @@ class GroupGenerator:
                 "Requested number of items must be less than or equal to the number of 'names'")
         if n < 0:
             raise ValueError("Requested number of items must be positive")
-        return_list = self._generate_combinations(n)
-        return [(ret, self.pair_matrix([ret])) for ret in return_list]
+        return self._generate_combinations(n)
+
+    def _generate_divisions(self, dist):
+        if len(dist) == 1:
+            return [[pc] for pc in self.possible_combinations[dist[0]]]
+        possible_divisions = []
+        # Could be multiple items, so recurse.
+        subsets = self._generate_divisions(dist[1:])
+        for pd in self.possible_combinations[dist[0]]:
+            # To avoid duplication, make sure all groups of the same length are in lexical order.
+            possible_divisions.extend([[pd] + s for s in subsets
+                                       if len(pd) != len(s[0]) or pd < s[0]])
+        # Now get rid of possible divisions with overlapping elements.
+        desired_n = sum(dist)
+        possible_divisions = [pd for pd in possible_divisions
+                              if len(set(itertools.chain(*pd))) == desired_n]
+        return possible_divisions
 
     def generate_divisions(self, dist):
-        # Generate all possible ways to divide our internal set of students into a distribution of
-        # groups dist. For example, if dist=[4,4,4] for 12 students, take the results of
-        # generate_combinations(4) and produce every set of 3 combinations that contains 12 unique
-        # students.
-        pass
+        """
+            Generate all possible divisions of the items in self.indices into smaller divisions of
+            size dist[0], dist[1], etc.  For example, if `self.indices = [0,1,2,3]`, then calling
+            this function with `dist=(2,2)` would result in:
+            ```
+            [
+                [[0, 1], [2, 3]],
+                [[0, 2], [1, 3]],
+                [[0, 3], [1, 2]]
+            ]
+
+            Parameters:
+            -----------
+                dist: tuple
+                    A tuple of ints with sum(dist)==len(self.indices)
+            Returns:
+            --------
+                return_list: a list such that each element of the list is a tuple with len(dist),
+                    and each subelement of the element is one of the indices from self.indices,
+                    such that set(all subelements)==set(self.indices) but no two elements contain
+                    the *same* splits into groups, considering permutations of either elements or
+                    subelements. len(return_list[i])==dist[i] for all i<len(dist).
+        """
+        if np.sum(dist) != self.n:
+            raise ValueError("Sum of elements of dist must be number of elements in self.names")
+        dist = sorted(dist)
+        dist_set = set(dist)
+        # You don't need to regenerate permutations for things you've already seen
+        for ds in dist_set:
+            if ds not in self.possible_combinations:
+                self.possible_combinations[ds] = self.generate_combinations(ds)
+        possible_divisions = self._generate_divisions(dist)
+        return [(pd, self.pair_matrix(pd)) for pd in possible_divisions] # Get the pair matrix too
+
+    def entirely_random_division(self, dist):
+        """
+            Return an entirely random division of self.indices into subgroups defined by dist.
+            
+            Parameters:
+            -----------
+                dist: list of ints
+                    A list representing the desired divisions of self.indices into subgroups
+            Returns:
+            --------
+                division: list of tuples
+                    Randomly-defined subgroups of size dist
+        """
+        elements = np.random.shuffle(self.indices)
+        return_list = []
+        for d in dist:
+            return_list.append(tuple(elements[:d]))
+            elements = elements[d:]
+        return return_list
 
     def choose_division(self, dist):
-        # Given the results of generate_divisions, select the optimal group
-        pass
+        """
+            Choose the optimal division of self.indices into groups of size dist, based on an accounting of
+            which elements have been grouped together in previous calls to choose_division.  Essentially, 
+            choose a division such that the sum of squared elements of the joint appearance matrix is as small
+            as possible.
+            
+            Parameters:
+            -----------
+                dist: list of ints
+                    A list representing the desired divisions of self.indices into subgroups
+            Returns:
+            --------
+                division: list of tuples
+                    Subgroups of size dist that cause the sum of squared elements of (M+M_new) to be as small as possible, given
+                    the current status of M, the joint appearances matrix.
+        """
+        if np.sum(self.matrix)==0:
+            # We don't have anything yet, so just randomly split things up
+            chosen_division = self.entirely_random_division(dist)
+            return chosen_division
+        # Find the minimum loss
+        possible_divisions = self.generate_divisions(dist)
+        loss = [(self.matrix + pd[1])**2 for pd in possible_divisions]
+        min_loss = min(loss)
+        possible_divisions = [p for p, l in zip(possible_divisions, loss) if l==min_loss]
+        return np.random.choice(possible_divisions)
 
     def choose_groups(self):
-        # Run chose_division for every requested grouping.
+        # Run choose_division for every requested grouping.
         pass
 
     def print_groups(self):

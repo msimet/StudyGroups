@@ -126,10 +126,6 @@ class TestCombinations(unittest.TestCase):
         """ Initialize a group generator to test against """
         self.gg = sg.GroupGenerator('test3.yaml')
 
-    def add_pair_matrix(self, ret):
-        """ Add a pair matrix for generate_combinations comparisons """
-        return [(r, self.gg.pair_matrix([r])) for r in ret]
-
     def test_internal_combinations(self):
         """ Test the internal code that generates combinations of indices """
         results = self.gg._generate_combinations(1, i=5)
@@ -171,22 +167,176 @@ class TestCombinations(unittest.TestCase):
         output = [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5],
                   [1, 2], [1, 3], [1, 4], [1, 5], [2, 3],
                   [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]]
-        np.testing.assert_equal(results, self.add_pair_matrix(output))
+        np.testing.assert_equal(results, output)
 
         results = self.gg.generate_combinations(3)
         output = [[0, 1, 2], [0, 1, 3], [0, 1, 4], [0, 1, 5], [0, 2, 3],
                   [0, 2, 4], [0, 2, 5], [0, 3, 4], [0, 3, 5], [0, 4, 5],
                   [1, 2, 3], [1, 2, 4], [1, 2, 5], [1, 3, 4], [1, 3, 5],
                   [1, 4, 5], [2, 3, 4], [2, 3, 5], [2, 4, 5], [3, 4, 5]]
-        np.testing.assert_equal(results, self.add_pair_matrix(output))
+        np.testing.assert_equal(results, output)
 
         results = self.gg.generate_combinations(1)
         output = [[0], [1], [2], [3], [4], [5]]
-        np.testing.assert_equal(results, self.add_pair_matrix(output))
+        np.testing.assert_equal(results, output)
 
         results = self.gg.generate_combinations(0)
         output = []
-        np.testing.assert_equal(results, self.add_pair_matrix(output))
+        np.testing.assert_equal(results, output)
+
+class TestDivisions(unittest.TestCase):
+    """ Tests that indices can be correctly partitioned into groups of different sizes.
+    """
+    def make_output_pair(self, gg, ret):
+        """ Generate a pair matrix to compare to the situations where that's an output """
+        return [(r, gg.pair_matrix(r)) for r in ret]
+
+    def test_internal_divisions(self):
+        """ Check that unique and correctly-ordered divisions can be generated """
+        gg = sg.GroupGenerator('test3.yaml')
+        gg.possible_combinations[2] = gg.generate_combinations(2)
+        gg.possible_combinations[1] = gg.generate_combinations(1)
+        gg.possible_combinations[4] = gg.generate_combinations(4)
+        results = gg._generate_divisions([2])
+        np.testing.assert_equal(results, [[gc] for gc in gg.generate_combinations(2)])
+
+        results = gg._generate_divisions([2, 2])
+        output = [[[0, 1], [2, 3]],
+                  [[0, 1], [2, 4]],
+                  [[0, 1], [2, 5]],
+                  [[0, 1], [3, 4]],
+                  [[0, 1], [3, 5]],
+                  [[0, 1], [4, 5]],
+                  [[0, 2], [1, 3]],
+                  [[0, 2], [1, 4]],
+                  [[0, 2], [1, 5]],
+                  [[0, 2], [3, 4]],
+                  [[0, 2], [3, 5]],
+                  [[0, 2], [4, 5]],
+                  [[0, 3], [1, 2]],
+                  [[0, 3], [1, 4]],
+                  [[0, 3], [1, 5]],
+                  [[0, 3], [2, 4]],
+                  [[0, 3], [2, 5]],
+                  [[0, 3], [4, 5]],
+                  [[0, 4], [1, 2]],
+                  [[0, 4], [1, 3]],
+                  [[0, 4], [1, 5]],
+                  [[0, 4], [2, 3]],
+                  [[0, 4], [2, 5]],
+                  [[0, 4], [3, 5]],
+                  [[0, 5], [1, 2]],
+                  [[0, 5], [1, 3]],
+                  [[0, 5], [1, 4]],
+                  [[0, 5], [2, 3]],
+                  [[0, 5], [2, 4]],
+                  [[0, 5], [3, 4]],
+                  [[1, 2], [3, 4]],
+                  [[1, 2], [3, 5]],
+                  [[1, 2], [4, 5]],
+                  [[1, 3], [2, 4]],
+                  [[1, 3], [2, 5]],
+                  [[1, 3], [4, 5]],
+                  [[1, 4], [2, 3]],
+                  [[1, 4], [2, 5]],
+                  [[1, 4], [3, 5]],
+                  [[1, 5], [2, 3]],
+                  [[1, 5], [2, 4]],
+                  [[1, 5], [3, 4]],
+                  [[2, 3], [4, 5]],
+                  [[2, 4], [3, 5]],
+                  [[2, 5], [3, 4]]]
+        np.testing.assert_equal(results, output)
+
+        results = gg._generate_divisions([2, 2, 2])
+        output = [[[0, 1], [2, 3], [4, 5]],
+                  [[0, 1], [2, 4], [3, 5]],
+                  [[0, 1], [2, 5], [3, 4]],
+                  [[0, 2], [1, 3], [4, 5]],
+                  [[0, 2], [1, 4], [3, 5]],
+                  [[0, 2], [1, 5], [3, 4]],
+                  [[0, 3], [1, 2], [4, 5]],
+                  [[0, 3], [1, 4], [2, 5]],
+                  [[0, 3], [1, 5], [2, 4]],
+                  [[0, 4], [1, 2], [3, 5]],
+                  [[0, 4], [1, 3], [2, 5]],
+                  [[0, 4], [1, 5], [2, 3]],
+                  [[0, 5], [1, 2], [3, 4]],
+                  [[0, 5], [1, 3], [2, 4]],
+                  [[0, 5], [1, 4], [2, 3]]]
+        np.testing.assert_equal(results, output)
+
+        results = gg._generate_divisions([4, 2])
+        output = [[[0, 1, 2, 3], [4, 5]],
+                  [[0, 1, 2, 4], [3, 5]],
+                  [[0, 1, 2, 5], [3, 4]],
+                  [[0, 1, 3, 4], [2, 5]],
+                  [[0, 1, 3, 5], [2, 4]],
+                  [[0, 1, 4, 5], [2, 3]],
+                  [[0, 2, 3, 4], [1, 5]],
+                  [[0, 2, 3, 5], [1, 4]],
+                  [[0, 2, 4, 5], [1, 3]],
+                  [[0, 3, 4, 5], [1, 2]],
+                  [[1, 2, 3, 4], [0, 5]],
+                  [[1, 2, 3, 5], [0, 4]],
+                  [[1, 2, 4, 5], [0, 3]],
+                  [[1, 3, 4, 5], [0, 2]],
+                  [[2, 3, 4, 5], [0, 1]]]
+        np.testing.assert_equal(results, output)
+
+        results = gg._generate_divisions([1, 1, 1, 1, 1, 1])
+        output = [[[0], [1], [2], [3], [4], [5]]]
+        np.testing.assert_equal(results, output)
+
+    def test_divisions(self):
+        """ Test that the whole process of dividing *all* indices into groups, uniquely, is
+            successful
+        """
+        gg = sg.GroupGenerator('test3.yaml')
+        np.testing.assert_raises(ValueError, gg.generate_divisions, [2])
+
+        results = gg.generate_divisions([2, 2, 2])
+        output = [[[0, 1], [2, 3], [4, 5]],
+                  [[0, 1], [2, 4], [3, 5]],
+                  [[0, 1], [2, 5], [3, 4]],
+                  [[0, 2], [1, 3], [4, 5]],
+                  [[0, 2], [1, 4], [3, 5]],
+                  [[0, 2], [1, 5], [3, 4]],
+                  [[0, 3], [1, 2], [4, 5]],
+                  [[0, 3], [1, 4], [2, 5]],
+                  [[0, 3], [1, 5], [2, 4]],
+                  [[0, 4], [1, 2], [3, 5]],
+                  [[0, 4], [1, 3], [2, 5]],
+                  [[0, 4], [1, 5], [2, 3]],
+                  [[0, 5], [1, 2], [3, 4]],
+                  [[0, 5], [1, 3], [2, 4]],
+                  [[0, 5], [1, 4], [2, 3]]]
+        np.testing.assert_equal(results, self.make_output_pair(gg, output))
+
+        results = gg.generate_divisions([4, 2])
+        output = [[[0, 1], [2, 3, 4, 5]],
+                  [[0, 2], [1, 3, 4, 5]],
+                  [[0, 3], [1, 2, 4, 5]],
+                  [[0, 4], [1, 2, 3, 5]],
+                  [[0, 5], [1, 2, 3, 4]],
+                  [[1, 2], [0, 3, 4, 5]],
+                  [[1, 3], [0, 2, 4, 5]],
+                  [[1, 4], [0, 2, 3, 5]],
+                  [[1, 5], [0, 2, 3, 4]],
+                  [[2, 3], [0, 1, 4, 5]],
+                  [[2, 4], [0, 1, 3, 5]],
+                  [[2, 5], [0, 1, 3, 4]],
+                  [[3, 4], [0, 1, 2, 5]],
+                  [[3, 5], [0, 1, 2, 4]],
+                  [[4, 5], [0, 1, 2, 3]]]
+        np.testing.assert_equal(results, self.make_output_pair(gg, output))
+
+        np.testing.assert_equal(gg.generate_divisions([4, 2]), gg.generate_divisions([2, 4]))
+
+        results = gg.generate_divisions([1, 1, 1, 1, 1, 1])
+        output = [[[0], [1], [2], [3], [4], [5]]]
+        np.testing.assert_equal(results, self.make_output_pair(gg, output))
+
 
 if __name__ == '__main__':
     unittest.main()
