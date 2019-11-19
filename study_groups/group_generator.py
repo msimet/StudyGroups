@@ -202,7 +202,7 @@ class GroupGenerator:
     def entirely_random_division(self, dist):
         """
             Return an entirely random division of self.indices into subgroups defined by dist.
-            
+
             Parameters:
             -----------
                 dist: list of ints
@@ -212,20 +212,21 @@ class GroupGenerator:
                 division: list of tuples
                     Randomly-defined subgroups of size dist
         """
-        elements = np.random.shuffle(self.indices)
+        elements = np.random.permutation(self.indices)
         return_list = []
         for d in dist:
-            return_list.append(tuple(elements[:d]))
+            return_list.append(tuple(sorted(elements[:d])))
             elements = elements[d:]
-        return return_list
+        return_list = sorted(return_list)
+        return return_list, self.pair_matrix(return_list)
 
     def choose_division(self, dist):
         """
-            Choose the optimal division of self.indices into groups of size dist, based on an accounting of
-            which elements have been grouped together in previous calls to choose_division.  Essentially, 
-            choose a division such that the sum of squared elements of the joint appearance matrix is as small
-            as possible.
-            
+            Choose the optimal division of self.indices into groups of size dist, based on an
+            accounting of which elements have been grouped together in previous calls to
+            choose_division.  Essentially, choose a division such that the sum of squared elements
+            of the joint appearance matrix is as small as possible.
+
             Parameters:
             -----------
                 dist: list of ints
@@ -233,19 +234,21 @@ class GroupGenerator:
             Returns:
             --------
                 division: list of tuples
-                    Subgroups of size dist that cause the sum of squared elements of (M+M_new) to be as small as possible, given
-                    the current status of M, the joint appearances matrix.
+                    Subgroups of size dist that cause the sum of squared elements of (M+M_new) to
+                    be as small as possible, given the current status of M, the joint appearances
+                    matrix.
         """
-        if np.sum(self.matrix)==0:
+        if np.sum(self.matrix) == 0:
             # We don't have anything yet, so just randomly split things up
             chosen_division = self.entirely_random_division(dist)
             return chosen_division
         # Find the minimum loss
         possible_divisions = self.generate_divisions(dist)
-        loss = [(self.matrix + pd[1])**2 for pd in possible_divisions]
+        loss = [np.sum((self.matrix + pd[1])**2) for pd in possible_divisions]
         min_loss = min(loss)
-        possible_divisions = [p for p, l in zip(possible_divisions, loss) if l==min_loss]
-        return np.random.choice(possible_divisions)
+        possible_divisions = [p for p, l in zip(possible_divisions, loss) if l == min_loss]
+        indx = np.random.choice(len(possible_divisions))
+        return possible_divisions[indx]
 
     def choose_groups(self):
         # Run choose_division for every requested grouping.

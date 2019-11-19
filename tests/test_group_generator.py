@@ -337,6 +337,65 @@ class TestDivisions(unittest.TestCase):
         output = [[[0], [1], [2], [3], [4], [5]]]
         np.testing.assert_equal(results, self.make_output_pair(gg, output))
 
+class TestSelections(unittest.TestCase):
+    """ Test that optimal groups are selected given a joint appearances matrix
+    """
+    def test_random_selection(self):
+        """ Test the random selection (when self.matrix==0) """
+        gg = sg.GroupGenerator('test3.yaml')
+        results = gg.choose_division([2, 2, 2])[0]
+        np.random.seed(217)
+        output = np.random.permutation(gg.indices).reshape(3, 2)
+        output = sorted([tuple(sorted(o)) for o in output])
+        np.testing.assert_equal(results, output)
+
+    def test_choices(self):
+        """ Test that good groups are chosen when some groups have already been made """
+        gg = sg.GroupGenerator('test3.yaml')
+        gg.matrix = np.array([[0, 0, 1, 1, 1, 1],
+                              [0, 0, 1, 1, 1, 1],
+                              [1, 1, 0, 0, 1, 1],
+                              [1, 1, 0, 0, 1, 1],
+                              [1, 1, 1, 1, 0, 0],
+                              [1, 1, 1, 1, 0, 0]])
+        results = gg.choose_division([2, 2, 2])[0] # [0] to nip off the pair matrix
+        output = [[0, 1], [2, 3], [4, 5]]
+        np.testing.assert_equal(results, output)
+
+        gg.matrix = np.array([[0, 0, 1, 0, 0, 0],
+                              [0, 0, 0, 0, 1, 0],
+                              [1, 0, 0, 0, 0, 0],
+                              [0, 0, 0, 0, 0, 1],
+                              [0, 1, 0, 0, 0, 0],
+                              [0, 0, 0, 1, 0, 0]])
+        # Do this a bunch of times to ensure that the first selection wasn't randomly correct
+        for _ in range(30):
+            result = gg.choose_division([2, 2, 2])[0]
+            output_options = [[[0, 1], [2, 3], [4, 5]],
+                              [[0, 1], [2, 5], [3, 4]],
+                              [[0, 3], [1, 2], [4, 5]],
+                              [[0, 3], [1, 5], [2, 4]],
+                              [[0, 4], [1, 3], [2, 5]],
+                              [[0, 4], [1, 5], [2, 3]],
+                              [[0, 5], [1, 2], [3, 4]],
+                              [[0, 5], [1, 3], [2, 4]]]
+            self.assertIn(result, output_options)
+
+        for _ in range(30):
+            result = gg.choose_division([4, 2])[0]
+            output_options = [[[4, 5], [0, 1, 2, 3]],
+                              [[3, 4], [0, 1, 2, 5]],
+                              [[2, 5], [0, 1, 3, 4]],
+                              [[2, 4], [0, 1, 3, 5]],
+                              [[2, 3], [0, 1, 4, 5]],
+                              [[1, 5], [0, 2, 3, 4]],
+                              [[1, 3], [0, 2, 4, 5]],
+                              [[1, 2], [0, 3, 4, 5]],
+                              [[0, 5], [1, 2, 3, 4]],
+                              [[0, 4], [1, 2, 3, 5]],
+                              [[0, 3], [1, 2, 4, 5]],
+                              [[0, 1], [2, 3, 4, 5]]]
+            self.assertIn(result, output_options)
 
 if __name__ == '__main__':
     unittest.main()
