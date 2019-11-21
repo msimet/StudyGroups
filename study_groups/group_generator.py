@@ -44,8 +44,8 @@ class GroupGenerator:
         if 'names' not in config or 'groups' not in config:
             raise TypeError(
                 "YAML file {} must have a 'names' key and a 'groups' key".format(yaml_file))
+        self.config = config
         self.n = len(config['names'])
-        self.names = config['names']
         self.indices = np.arange(self.n, dtype=int)
         # matrix: the joint appearances count
         # (if student 1 & 2 appear together once, matrix[1,2]==matrix[2,1]==1).
@@ -53,6 +53,39 @@ class GroupGenerator:
         if 'seed' in config:
             np.random.seed(config['seed'])
         self.possible_combinations = {} # Hackily memoize some of the distribution calculations
+        self.most_recent_dist = None # More memoization
+        self.most_recent_dist_results = None
+        self._process_groups(config['groups'])
+        self.chosen_groups = {}
+
+    def _process_groups(self, group_config):
+        """
+            Turn a list of dicts `group_config` with 'num' and 'group' keys into a list of tuples
+            describing what groups to generate and how many of them, with a few optimizations to
+            reduce processing time.
+
+            Parameters
+            ----------
+            group_config: list of dicts
+                The 'groups' key from an appropriate YAML file.
+        """
+        # Test for malformed inputs, and make a list of tuples of the inputs
+        self.all_groups = []
+        for item in group_config:
+            if 'distribution' not in item  and 'num' not in item:
+                raise TypeError("Each element of 'groups' list must be a dict with "+
+                                "'distribution' and 'num' keys")
+            if not isinstance(item['num'], int):
+                raise TypeError("Each 'groups' 'num' key must be an int")
+            if not all([isinstance(i, int) for i in item['distribution']]):
+                raise TypeError("Each element of 'groups' 'distribution' must be an int")
+            if sum(item['distribution']) != self.n:
+                raise TypeError(f"Requested a distribution of numbers {item['distribution']} "+
+                                f"that does not add up to total number of names {self.n}")
+            self.all_groups.append((item['num'], tuple(sorted(item['distribution']))))
+        self.all_groups_dict = {}
+        for num, group in self.all_groups:
+            self.all_groups_dict[group] = self.all_groups_dict.get(group, 0) + num
 
     def pairs(self, divisions):
         """
@@ -83,7 +116,7 @@ class GroupGenerator:
 
     def pair_matrix(self, divisions):
         """
-            Return a pair matrix representing joint appearances in the subgroups defined by
+            Return a boolean pair matrix representing joint appearances in the subgroups defined by
             `divisions`. For example, if the divisions are `[[0, 1, 4], [2, 3, 5]]`, then return
             ```
             [[0 1 0 0 1 0]
@@ -105,10 +138,10 @@ class GroupGenerator:
                 pair_matrix: a np.array of size (len(self.indices), len(self.indices)) indicating
                 joint appearances
         """
-        matrix = np.zeros((self.n, self.n))
+        matrix = np.full((self.n, self.n), False)
         pairs = self.pairs(divisions)
         pairs = ([p[0] for p in pairs], [p[1] for p in pairs])
-        matrix[pairs] += 1
+        matrix[pairs] = True
         return matrix
 
     def _generate_combinations(self, n, i=0):
@@ -188,16 +221,20 @@ class GroupGenerator:
                     the *same* splits into groups, considering permutations of either elements or
                     subelements. len(return_list[i])==dist[i] for all i<len(dist).
         """
-        if np.sum(dist) != self.n:
-            raise ValueError("Sum of elements of dist must be number of elements in self.names")
-        dist = sorted(dist)
-        dist_set = set(dist)
-        # You don't need to regenerate permutations for things you've already seen
-        for ds in dist_set:
-            if ds not in self.possible_combinations:
-                self.possible_combinations[ds] = self.generate_combinations(ds)
-        possible_divisions = self._generate_divisions(dist)
-        return [(pd, self.pair_matrix(pd)) for pd in possible_divisions] # Get the pair matrix too
+        if dist != self.most_recent_dist:
+            self.most_recent_dist = dist
+            if np.sum(dist) != self.n:
+                raise ValueError("Sum of elements of dist must be number of elements in self.names")
+            dist = sorted(dist)
+            dist_set = set(dist)
+            # You don't need to regenerate permutations for things you've already seen
+            for ds in dist_set:
+                if ds not in self.possible_combinations:
+                    self.possible_combinations[ds] = self.generate_combinations(ds)
+            possible_divisions = self._generate_divisions(dist)
+            self.most_recent_dist_results = [(pd, self.pair_matrix(pd))
+                                             for pd in possible_divisions]
+        return self.most_recent_dist_results
 
     def entirely_random_division(self, dist):
         """
@@ -244,15 +281,27 @@ class GroupGenerator:
             return chosen_division
         # Find the minimum loss
         possible_divisions = self.generate_divisions(dist)
-        loss = [np.sum((self.matrix + pd[1])**2) for pd in possible_divisions]
+        # This is actually (delta(loss)-1)/2, where loss equals sum(self.matrix**2)
+        # but (delta(loss)-1)/2 is easier/faster to compute
+        loss = [np.sum(self.matrix[pd[1]]) for pd in possible_divisions]
         min_loss = min(loss)
         possible_divisions = [p for p, l in zip(possible_divisions, loss) if l == min_loss]
         indx = np.random.choice(len(possible_divisions))
         return possible_divisions[indx]
 
     def choose_groups(self):
-        # Run choose_division for every requested grouping.
-        pass
+        """ Select a set of groupings based on the input YAML file, attempting to minimize repeated
+            groups/pairings as much as possible.
+        """
+        self.chosen_groups = {}
+         # Bigger things are less flexible, so reverse
+        group_keys = sorted(list(self.all_groups_dict.keys()), reverse=True)
+        for group in group_keys:
+            self.chosen_groups[group] = []
+            for _ in range(self.all_groups_dict[group]):
+                cgroup, cmatrix = self.choose_division(group)
+                self.chosen_groups[group].append(cgroup)
+                self.matrix += cmatrix
 
     def print_groups(self):
         # Print the results as a CSV to the terminal.

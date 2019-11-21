@@ -397,5 +397,36 @@ class TestSelections(unittest.TestCase):
                               [[0, 1], [2, 3, 4, 5]]]
             self.assertIn(result, output_options)
 
+class TestMultiAssignment(unittest.TestCase):
+    """ Test that reasonable groups are selected for a given yaml file
+    """
+    def test_six(self):
+        """ Test the yaml file with six names """
+        gg = sg.GroupGenerator('test3.yaml')
+        gg.choose_groups()
+        np.testing.assert_equal(sorted(list(gg.chosen_groups.keys())), [(2, 2, 2), (2, 4), (3, 3)])
+        np.testing.assert_equal(len(gg.chosen_groups[(2, 2, 2)]), 15)
+        np.testing.assert_equal(len(gg.chosen_groups[(2, 4)]), 15)
+        np.testing.assert_equal(len(gg.chosen_groups[(3, 3)]), 10)
+        # You would think that doing this would result in the set of all possible combinations;
+        # in practice, groups are occasionally repeated even though that isn't the optimal solution
+        # (the solutions found here are merely "very good"). So we may not get exactly 14 overlaps
+        # which is what we would get for the perfect solution--within 1 is okay though.
+        self.assertTrue(np.all(np.abs(gg.matrix - 14*np.ones((6, 6)) + 14*np.diag(np.ones(6)))
+                               <= np.ones((6, 6))))
+
+    def test_twelve(self):
+        """ Test the yaml file with twelve names """
+        gg = sg.GroupGenerator('test0.yaml')
+        gg.choose_groups()
+        np.testing.assert_equal(sorted(list(gg.chosen_groups.keys())),
+                                [(2, 2, 2, 2, 2, 2), (3, 3, 3, 3), (4, 4, 4), (6, 6)])
+        np.testing.assert_equal(len(gg.chosen_groups[(2, 2, 2, 2, 2, 2)]), 22)
+        np.testing.assert_equal(len(gg.chosen_groups[(3, 3, 3, 3)]), 22)
+        np.testing.assert_equal(len(gg.chosen_groups[(4, 4, 4)]), 22)
+        np.testing.assert_equal(len(gg.chosen_groups[(6, 6)]), 22)
+        self.assertTrue(np.all(np.abs(gg.matrix - 22*np.ones((12, 12)) + 22*np.diag(np.ones(12)))
+                               <= np.ones((12, 12))))
+
 if __name__ == '__main__':
     unittest.main()
