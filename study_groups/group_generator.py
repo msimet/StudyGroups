@@ -38,6 +38,7 @@ class GroupGenerator:
     yaml_file: str or path
         A YAML config file with the format above
     """
+    #pylint: disable=R0902
     def __init__(self, yaml_file):
         with open(yaml_file) as f:
             config = yaml.load(f, Loader=yaml.SafeLoader)
@@ -70,7 +71,7 @@ class GroupGenerator:
                 The 'groups' key from an appropriate YAML file.
         """
         # Test for malformed inputs, and make a list of tuples of the inputs
-        self.all_groups = []
+        all_groups = []
         for item in group_config:
             if 'distribution' not in item  and 'num' not in item:
                 raise TypeError("Each element of 'groups' list must be a dict with "+
@@ -82,9 +83,9 @@ class GroupGenerator:
             if sum(item['distribution']) != self.n:
                 raise TypeError(f"Requested a distribution of numbers {item['distribution']} "+
                                 f"that does not add up to total number of names {self.n}")
-            self.all_groups.append((item['num'], tuple(sorted(item['distribution']))))
+            all_groups.append((item['num'], tuple(sorted(item['distribution']))))
         self.all_groups_dict = {}
-        for num, group in self.all_groups:
+        for num, group in all_groups:
             self.all_groups_dict[group] = self.all_groups_dict.get(group, 0) + num
 
     def pairs(self, divisions):
@@ -224,7 +225,7 @@ class GroupGenerator:
         if dist != self.most_recent_dist:
             self.most_recent_dist = dist
             if np.sum(dist) != self.n:
-                raise ValueError("Sum of elements of dist must be number of elements in self.names")
+                raise ValueError("Sum of elements of dist must be number of elements in names")
             dist = sorted(dist)
             dist_set = set(dist)
             # You don't need to regenerate permutations for things you've already seen
@@ -304,5 +305,30 @@ class GroupGenerator:
                 self.matrix += cmatrix
 
     def print_groups(self):
-        # Print the results as a CSV to the terminal.
-        pass
+        """ Print the groupings found in a call to self.choose_groups(), and rearrange the
+            resulting outputs so they align with the original YAML requests (which may have
+            been modified for easier internal processing).
+
+            Each divisions of people into subgroups is printed as a .csv file, with each group in
+            columns separated with a blank column, and blank lines between each division of people.
+        """
+        names = self.config['names']+['']
+        output = []
+        for group in self.config['groups']:
+            dist = group['distribution']
+            num = group['num']
+            maxsubgroup = max(dist)
+            sorted_dist = tuple(sorted(dist))
+            chosen_groups = self.chosen_groups[sorted_dist][:num]
+            self.chosen_groups[sorted_dist] = self.chosen_groups[sorted_dist][num:]
+            index_order = np.zeros(len(dist), dtype=int)
+            index_order[np.argsort(dist)] = np.arange(len(dist), dtype=int)
+            for chosen_group in chosen_groups:
+                group_inorder = [list(chosen_group[i]) for i in index_order]
+                for gi in group_inorder:
+                    gi += [-1]*(maxsubgroup-len(gi))
+                lines = []
+                for i in range(maxsubgroup):
+                    lines.append(',,'.join([names[gi[i]] for gi in group_inorder]))
+                output.append('\n'.join(lines))
+        return '\n\n\n'.join(output)

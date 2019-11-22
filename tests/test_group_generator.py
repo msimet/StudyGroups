@@ -19,18 +19,18 @@ class TestInitialization(unittest.TestCase):
         np.testing.assert_raises(TypeError, sg.GroupGenerator)
         gg = sg.GroupGenerator('test0.yaml')
         np.testing.assert_equal(gg.n, 12)
-        np.testing.assert_equal(gg.names, ['Alice', 'Bob', 'Charisma', 'Dexter',
-                                           'Emily', 'Franklin', 'Greta', 'Hamlet',
-                                           'Ivy', 'Jasper', 'Katie', 'Louis'])
+        np.testing.assert_equal(gg.config['names'], ['Alice', 'Bob', 'Charisma', 'Dexter',
+                                                     'Emily', 'Franklin', 'Greta', 'Hamlet',
+                                                     'Ivy', 'Jasper', 'Katie', 'Louis'])
         np.testing.assert_equal(gg.indices, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         np.testing.assert_equal(gg.matrix, np.zeros((12, 12)))
 
-        np.testing.assert_raises(TypeError, sg.GroupGenerator, 'test1.yaml')
-        np.testing.assert_raises(TypeError, sg.GroupGenerator, 'test2.yaml')
+        np.testing.assert_raises(TypeError, sg.GroupGenerator, 'test_failure1.yaml')
+        np.testing.assert_raises(TypeError, sg.GroupGenerator, 'test_failure2.yaml')
         gg = sg.GroupGenerator('test3.yaml')
         np.testing.assert_equal(gg.n, 6)
-        np.testing.assert_equal(gg.names, ['Alice', 'Bob', 'Charisma',
-                                           'Dexter', 'Emily', 'Franklin'])
+        np.testing.assert_equal(gg.config['names'], ['Alice', 'Bob', 'Charisma',
+                                                     'Dexter', 'Emily', 'Franklin'])
         np.testing.assert_equal(gg.indices, [0, 1, 2, 3, 4, 5])
         np.testing.assert_equal(gg.matrix, np.zeros((6, 6)))
 
@@ -427,6 +427,67 @@ class TestMultiAssignment(unittest.TestCase):
         np.testing.assert_equal(len(gg.chosen_groups[(6, 6)]), 22)
         self.assertTrue(np.all(np.abs(gg.matrix - 22*np.ones((12, 12)) + 22*np.diag(np.ones(12)))
                                <= np.ones((12, 12))))
+
+
+class TestPrinting(unittest.TestCase):
+    """ Test that given a set of groups, the proper output is printed. """
+    def test_printer(self):
+        """ Test the print_groups() function of GroupGenerator. """
+        gg = sg.GroupGenerator('test4.yaml')
+        gg.chosen_groups = {
+            (2, 2, 2): [[(0, 1), (2, 3), (4, 5)],
+                        [(0, 2), (1, 3), (4, 5)],
+                        [(0, 3), (1, 4), (2, 5)],
+                        [(0, 4), (2, 3), (1, 5)],
+                        [(0, 5), (1, 2), (3, 4)],
+                        [(0, 1), (2, 5), (3, 4)]],
+            (2, 4):    [[(0, 1), (2, 3, 4, 5)],
+                        [(2, 3), (0, 1, 4, 5)]],
+            (3, 3):    [[(0, 1, 2), (3, 4, 5)],
+                        [(0, 2, 4), (1, 3, 5)],
+                        [(0, 3, 5), (1, 2, 4)]]
+        }
+        expected_results = ("Alice,,Charisma,,Emily\n"+
+                            "Bob,,Dexter,,Franklin\n"+
+                            "\n\n"+
+                            "Alice,,Bob,,Emily\n"+
+                            "Charisma,,Dexter,,Franklin\n"+
+                            "\n\n"+
+                            "Alice,,Bob,,Charisma\n"+
+                            "Dexter,,Emily,,Franklin\n"+
+                            "\n\n"+
+                            "Alice,,Dexter\n"+
+                            "Bob,,Emily\n"+
+                            "Charisma,,Franklin\n"+
+                            "\n\n"+
+                            "Alice,,Bob\n"+
+                            "Charisma,,Dexter\n"+
+                            "Emily,,Franklin\n"+
+                            "\n\n"+
+                            "Alice,,Bob\n"+
+                            "Dexter,,Charisma\n"+
+                            "Franklin,,Emily\n"+
+                            "\n\n"+
+                            "Alice,,Charisma,,Bob\n"+
+                            "Emily,,Dexter,,Franklin\n"+
+                            "\n\n"+
+                            "Alice,,Bob,,Dexter\n"+
+                            "Franklin,,Charisma,,Emily\n"+
+                            "\n\n"+
+                            "Alice,,Charisma,,Dexter\n"+
+                            "Bob,,Franklin,,Emily\n"+
+                            "\n\n"+
+                            "Charisma,,Alice\n"+
+                            "Dexter,,Bob\n"+
+                            "Emily,,\n"+
+                            "Franklin,,\n"+
+                            "\n\n"+
+                            "Charisma,,Alice\n"+
+                            "Dexter,,Bob\n"+
+                            ",,Emily\n"+
+                            ",,Franklin")
+        results = gg.print_groups()
+        np.testing.assert_equal(results, expected_results)
 
 if __name__ == '__main__':
     unittest.main()
