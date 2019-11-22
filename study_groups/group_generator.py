@@ -70,7 +70,7 @@ class GroupGenerator:
             group_config: list of dicts
                 The 'groups' key from an appropriate YAML file.
         """
-        # Test for malformed inputs, and make a list of tuples of the inputs
+        # Test for malformed inputs, and make a dict that unifies the inputs by distribution
         all_groups = []
         for item in group_config:
             if 'distribution' not in item  and 'num' not in item:
@@ -141,6 +141,8 @@ class GroupGenerator:
         """
         matrix = np.full((self.n, self.n), False)
         pairs = self.pairs(divisions)
+        # This gives [1, 2], [2, 1] (for example), but numpy wants a list whose first element is
+        # all the x-coords and whose second is all the y-coords, so re-form that list.
         pairs = ([p[0] for p in pairs], [p[1] for p in pairs])
         matrix[pairs] = True
         return matrix
@@ -148,6 +150,7 @@ class GroupGenerator:
     def _generate_combinations(self, n, i=0):
         """ Produce all combinations from self.indices[i:] that have length n. """
         if n == 1:
+            # Needs to be a list so we can append it to things.
             return [[ii] for ii in self.indices[i:]]
         return_list = []
         for ii in range(i, self.n):
@@ -157,14 +160,8 @@ class GroupGenerator:
     def generate_combinations(self, n):
         """
             Produce all possible combinations from the list of `self.indices` with length `n`, and
-            return a list of tuples where the first item is the combinations and the second is the
-            matrix of indices appearing together.  For example, if `self.indices = [0, 1, 2, 3]`,
-            then calling this with n=2 will return
-            [((0, 1, 2), [[0, 1, 1, 0], [1, 0, 1, 0], [1, 1, 0, 0], [0, 0, 0, 0]]),
-             ((0, 1, 3), [[0, 1, 0, 1], [1, 0, 0, 1], [0, 0, 0, 0], [1, 1, 0, 0]]),
-             ((0, 2, 3), [[0, 0, 1, 1], [0, 0, 0, 0], [1, 0, 0, 1], [1, 0, 1, 0]]),
-             ((1, 2, 3), [[0, 0, 0, 0], [0, 0, 1, 1], [0, 1, 0, 1], [0, 1, 1, 0]])],
-            not necessarily in that order.
+            return a list those combinations.  For example, if `self.indices = [0, 1, 2, 3]`,
+            then calling this with n=2 will return `[[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]`.
 
             Parameters:
             -----------
@@ -172,8 +169,7 @@ class GroupGenerator:
                     The number of items in the individual group
             Returns:
             --------
-                return_list: a list of tuples where the first item of the tuple is a combination and
-                             the second is a matrix describing which items appear together.
+                return_list: a list all possible combinations of length n.
         """
         if n >= self.n:
             raise ValueError(
@@ -183,6 +179,15 @@ class GroupGenerator:
         return self._generate_combinations(n)
 
     def _generate_divisions(self, dist):
+        """ Return a set of divisions: a set of subgroups where every element of self.indices is
+            represented. Divisions of the same length are sorted in lexical order to avoid
+            duplication.
+
+            The return form is a list of lists of lists. The most internal lists are indices from
+            self.indices, with the length of each subgrouping in dist. The intermediate-level list
+            is a set of subgroups that contain all elements of self.indices. The top-level list is
+            all possible sets of subgroups that contain all elements of self.indices.
+        """
         if len(dist) == 1:
             return [[pc] for pc in self.possible_combinations[dist[0]]]
         possible_divisions = []
@@ -193,6 +198,7 @@ class GroupGenerator:
             possible_divisions.extend([[pd] + s for s in subsets
                                        if len(pd) != len(s[0]) or pd < s[0]])
         # Now get rid of possible divisions with overlapping elements.
+        # Can't use self.n as this might be a subset of the full dist on a recursive call.
         desired_n = sum(dist)
         possible_divisions = [pd for pd in possible_divisions
                               if len(set(itertools.chain(*pd))) == desired_n]
@@ -222,17 +228,25 @@ class GroupGenerator:
                     the *same* splits into groups, considering permutations of either elements or
                     subelements. len(return_list[i])==dist[i] for all i<len(dist).
         """
+        # Hacky memoization: only recompute possible divisions in to this distribution if it's
+        # not the last one we saw. At worst--if a user has messed with something in the guts of
+        # GroupGenerator--this will do some unnecessary re-computation, rather than using up
+        # memory to save all previous results; in the default workings of GroupGenerator, it will
+        # never need to recompute because we unify all the similar dists first.
         if dist != self.most_recent_dist:
             self.most_recent_dist = dist
             if np.sum(dist) != self.n:
                 raise ValueError("Sum of elements of dist must be number of elements in names")
             dist = sorted(dist)
             dist_set = set(dist)
-            # You don't need to regenerate permutations for things you've already seen
+            # You don't need to regenerate permutations for things you've already seen.
+            # We *do* keep all versions of these permutations, because they may get reused in
+            # different dists.
             for ds in dist_set:
                 if ds not in self.possible_combinations:
                     self.possible_combinations[ds] = self.generate_combinations(ds)
             possible_divisions = self._generate_divisions(dist)
+            # Only bother to compute the pair matrices here, to save memory
             self.most_recent_dist_results = [(pd, self.pair_matrix(pd))
                                              for pd in possible_divisions]
         return self.most_recent_dist_results
@@ -282,11 +296,21 @@ class GroupGenerator:
             return chosen_division
         # Find the minimum loss
         possible_divisions = self.generate_divisions(dist)
-        # This is actually (delta(loss)-1)/2, where loss equals sum(self.matrix**2)
-        # but (delta(loss)-1)/2 is easier/faster to compute
-        loss = [np.sum(self.matrix[pd[1]]) for pd in possible_divisions]
-        min_loss = min(loss)
-        possible_divisions = [p for p, l in zip(possible_divisions, loss) if l == min_loss]
+        # This is actually (delta(loss)-n_pairs)/2, where loss equals sum(self.matrix**2)
+        # but (delta(loss)-n_pairs)/2 is easier/faster to compute. Since:
+        # loss = sum(self.matrix**2)
+        # delta loss = sum((self.matrix + ones[pair_matrix])**2 - self.matrix**2))
+        # delta loss = sum(self.matrix**2 + 2*self.matrix[pair_matrix] + self.ones[pair_matrix]**2
+        #                  - self.matrix**2)
+        # since sum(self.matrix*ones[boolean mask]) = sum(self.matrix[boolean mask])
+        # and since self.ones**2 = self.ones, and sum(self.ones[boolean mask]) = sum(boolean mask):
+        # delta loss = sum(2*self.matrix[pair_matrix] + sum(pair_matrix))
+        # We're just trying to minimize delta loss so we can ignore sum(pair_matrix) which is the
+        # same for all options, as is the factor of two.
+        dloss = [np.sum(self.matrix[pd[1]]) for pd in possible_divisions]
+        min_dloss = min(dloss)
+        possible_divisions = [p for p, d in zip(possible_divisions, dloss) if d == min_dloss]
+        # There may be more than one option with the same loss value--randomly pick one.
         indx = np.random.choice(len(possible_divisions))
         return possible_divisions[indx]
 
@@ -295,7 +319,7 @@ class GroupGenerator:
             groups/pairings as much as possible.
         """
         self.chosen_groups = {}
-         # Bigger things are less flexible, so reverse
+         # Bigger things are less flexible, so reverse sort
         group_keys = sorted(list(self.all_groups_dict.keys()), reverse=True)
         for group in group_keys:
             self.chosen_groups[group] = []
@@ -319,15 +343,22 @@ class GroupGenerator:
             num = group['num']
             maxsubgroup = max(dist)
             sorted_dist = tuple(sorted(dist))
+            # In case there was more than one key in self.config['groups'] with this
+            # distribution, just peel off the requested number
             chosen_groups = self.chosen_groups[sorted_dist][:num]
             self.chosen_groups[sorted_dist] = self.chosen_groups[sorted_dist][num:]
+            # We sorted the groups--(4,2) becomes (2,4). This indexing undoes that sorting
+            # for printing purposes.
             index_order = np.zeros(len(dist), dtype=int)
             index_order[np.argsort(dist)] = np.arange(len(dist), dtype=int)
             for chosen_group in chosen_groups:
                 group_inorder = [list(chosen_group[i]) for i in index_order]
+                # Pad the groups if they are not all the same length
                 for gi in group_inorder:
+                    # names[-1] is the empty string--we ensured that above.
                     gi += [-1]*(maxsubgroup-len(gi))
                 lines = []
+                # We want to print column-wise, so step through each group for each line.
                 for i in range(maxsubgroup):
                     lines.append(',,'.join([names[gi[i]] for gi in group_inorder]))
                 output.append('\n'.join(lines))
